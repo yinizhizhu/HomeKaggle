@@ -3,14 +3,14 @@ import torch
 import numpy as np
 import pandas as pd 
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import Imputer
+from sklearn.preprocessing import Imputer, MinMaxScaler
 import random
 from torch.utils.data import Dataset
 
 import pdb
 
 
-app_feature_groups = {
+_app_group_feat_map = {
 
     'app_features' : [
         'NAME_CONTRACT_TYPE',
@@ -181,81 +181,124 @@ app_feature_groups = {
     ],
 }
 
-def search_feature_group(feat):
+def _search_feature_group(feat):
     result = None
-    for key, value in app_feature_groups.items():
+    for key, value in _app_group_feat_map.items():
         if feat in value:
             result = key
             break
-
     return result
 
-        # Drop useless columns
-        # self.app_train = self.app_train.drop(columns = ['SK_ID_CURR'])
-        # self.app_test = self.app_test.drop(columns = ['SK_ID_CURR'])
+def _get_all_raw_feature():
+    all_feature = list(_app_group_feat_map.values())
+    all_feature = [feat for group in all_feature for feat in group]
+    return all_feature
 
-class LoanDataset(Dataset):
-    def __init__(self, data_dir):
 
-        app_train_file = os.path.join(data_dir, 'application_train.csv')
-        app_test_file = os.path.join(data_dir, 'application_test.csv')
-        
 
-        # Load raw data
-        self.app_train = pd.read_csv(app_train_file)
-        self.app_test = pd.read_csv(app_test_file)
 
-        self.train_labels = self.app_train['TARGET']
+class LoanDataset(object):
+
+    def __init__(self):
+
+        ################# Load Data ################################
+        data_dir='../input'
+
+        self.app_train_file = os.path.join(data_dir, 'application_train.csv')
+        self.app_test_file = os.path.join(data_dir, 'application_test.csv')
+
+        self.app_train = pd.read_csv(self.app_train_file)
+        self.app_test = pd.read_csv(self.app_test_file)
+
+        self.train_num = self.app_train.shape[0]
+        self.test_num = self.app_test.shape[0]
+
+        self.train_labels = np.array(self.app_train['TARGET'])
         print('Raw training label shape: ', self.train_labels.shape)
 
-        # Feature grouping
-        self.app_train = {k : self.app_train[v] for k, v in app_feature_groups.items()}
-        self.app_test = {k : self.app_test[v] for k, v in app_feature_groups.items()}
+        ################# Feature grouping ################################
+        self.app_train = {k : self.app_train[v] for k, v in _app_group_feat_map.items()}
+        self.app_test = {k : self.app_test[v] for k, v in _app_group_feat_map.items()}
 
-        print('Feature dims after grouped:')
-        self.__print_feature_dims()
+        print('Columns nums after grouped:')
+        self._print_column_num()
 
-        # One-hot encoding of categorical variables
+        ################# One-hot encoding ################################
         self.app_train = {k : pd.get_dummies(v, dummy_na=False)     # Nan: all zero
                              for k, v in self.app_train.items()}
-
         self.app_test = {k : pd.get_dummies(v, dummy_na=False)
                              for k, v in self.app_test.items()}
-        
-        print('Feature dims after one-hot encoding:')
-        self.__print_feature_dims()
 
-        # Align the training and testing data, keep only columns present in both dataframes
-        for group in app_feature_groups.keys():
+        print('Columns nums after one-hot encoding:')
+        self._print_column_num()
+
+        ############ Align the training and testing data ###########################
+        for group in _app_group_feat_map.keys(): # keep only columns present in both dataframes
             self.app_train[group], self.app_test[group] = self.app_train[group].align(
                     self.app_test[group], join = 'inner', axis = 1)
 
-        print('Feature dims after alignment:')
-        self.__print_feature_dims()
+        print('Columns nums after alignment:')
+        self._print_column_num()
 
-        # Remove anomaly
-        self.__remove_anomaly(anom_feat='DAYS_EMPLOYED', anom_value=365243)
+        ################# Remove anomaly ################################
+        self._remove_anomaly(anom_feat='DAYS_EMPLOYED', anom_value=365243)
 
-        print('Feature dims after anomaly removal:')
-        self.__print_feature_dims()
+        print('Columns nums after anomaly removal:')
+        self._print_column_num()
 
-        # Fill missing data
-        for group in app_feature_groups.keys():
+        ################# Update feature group maps ################################
+        self.app_group_feat_map = {k : list(v.columns) for k, v in self.app_train.items()}
+        index_finder_copy = dict(self.app_group_feat_map)  # For finding idx
+
+        print(self.app_group_feat_map['app_features'])
+
+        # Sub-group one-hot features and to idx
+        all_raw_feat = _get_all_raw_feature()
+
+        for raw_feat in all_raw_feat:
+            raw_feat_group = _search_feature_group(raw_feat)
+
+            feat_list = self.app_group_feat_map[raw_feat_group]
+            feat_list_temp = list(feat_list)
+            feat_sub_list = []
+
+            for idx, feat in enumerate(feat_list):
+                if type(feat) == list:
+                    continue
+                if feat.startswith(raw_feat):
+                    real_idx = index_finder_copy[raw_feat_group].index(feat)
+                    feat_sub_list.append(real_idx)
+                    feat_list_temp.remove(feat)
+
+            if feat_sub_list:
+                feat_list_temp.append(feat_sub_list)
+
+            self.app_group_feat_map[raw_feat_group] = feat_list_temp
+
+        print(self.app_group_feat_map['app_features'])
+
+        ################ Fill missing data ################
+        for group in _app_group_feat_map.keys():
             imputer = Imputer(strategy = 'median')
             imputer.fit(self.app_train[group])
             self.app_train[group] = imputer.transform(self.app_train[group])
             self.app_test[group] = imputer.transform(self.app_test[group])
 
-        pdb.set_trace()
+        # 242 features
 
-        #app_train['TARGET'].value_counts()[0]
-        #app_train['TARGET'].value_counts()[1]
+        ############### Scale features ####################
+        for group in _app_group_feat_map.keys():
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaler.fit(self.app_train[group])
+            self.app_train[group] = scaler.transform(self.app_train[group])
+            self.app_test[group] = scaler.transform(self.app_test[group])
 
-    def __print_feature_dims(self):
+
+    def _print_column_num(self):
         print(sum([len(i.columns) for i in self.app_train.values()]))
         print(sum([len(i.columns) for i in self.app_test.values()]))
 
-    def __print_df_shape(self):
+    def _print_df_shape(self):
 
         print('\nTraining data shape:\n')
         for key, value in self.app_train.items():
@@ -267,18 +310,9 @@ class LoanDataset(Dataset):
             print(key)
             print(value.shape)
 
-    # def __get_all_description(self):
-    #     i = 0
-    #     for col in self.app_train.columns:
-    #         print(self.app_train[col].describe())
-    #         print(i)
-    #         print()
-    #         print()
-    #         i += 1
+    def _remove_anomaly(self, anom_feat, anom_value):
 
-    def __remove_anomaly(self, anom_feat, anom_value):
-
-        group = search_feature_group(anom_feat)
+        group = _search_feature_group(anom_feat)
 
         if not group:
             raise Exception('Invalid feature')
@@ -295,7 +329,66 @@ class LoanDataset(Dataset):
         self.app_test[group][anom_feat].replace(
                 {anom_value: np.nan}, inplace = True)
 
+    # def __get_all_description(self):
+    #     i = 0
+    #     for col in self.app_train.columns:
+    #         print(self.app_train[col].describe())
+    #         print(i)
+    #         print()
+    #         print()
+    #         i += 1
 
 
 
-test_dataset = LoanDataset(data_dir='../input')
+class LoanDatasetWrapper(Dataset):
+
+    def __init__(self, mode):
+
+        self.dataset = LoanDataset()
+
+        if mode not in ['train', 'test']:
+            raise Exception('Invalid mode')
+        else:
+            self.mode = mode
+
+        if self.mode == 'train':
+            self.data = self.dataset.app_train
+            self.label = self.dataset.train_labels
+        elif self.mode == 'test':
+            self.data = self.dataset.app_test
+
+    def get_feature_grouping(self):
+        return self.dataset.app_group_feat_map
+
+    def __len__(self):
+        lens = [i.shape[0] for i in self.data.values()]
+        return lens[0]
+
+    def __getitem__(self, idx):
+
+        entry = {k : v[idx] for k, v in self.data.items()}
+
+        if self.mode == 'train':
+            entry['label'] = self.label[idx]
+
+        return entry
+
+
+        
+
+
+# test_dataset = LoanDatasetWrapper(mode='train')
+# entry = test_dataset[0]
+
+# pdb.set_trace()
+
+
+
+
+
+
+
+
+        # Drop useless columns
+        # self.app_train = self.app_train.drop(columns = ['SK_ID_CURR'])
+        # self.app_test = self.app_test.drop(columns = ['SK_ID_CURR'])
