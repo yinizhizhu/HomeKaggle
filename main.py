@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+import pandas as pd
 import torch.nn.functional as F
 import torch.optim as optim
 import matplotlib.pyplot as plt
@@ -17,8 +18,8 @@ import pdb
 epoch = 150
 batch_size = 256
 
-learning_rate = 1e-3
-lamda = 0
+learning_rate = 1e-4  # 1e-5
+lamda = 1e-6
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -36,6 +37,8 @@ val_loader = torch.utils.data.DataLoader(
 test_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=batch_size, shuffle=False)
 
+
+print(len(train_dataset))
 #######################
 
 model = CreditNet(train_dataset.get_feature_grouping()).to(device)
@@ -43,7 +46,7 @@ model = CreditNet(train_dataset.get_feature_grouping()).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=lamda)
 
 #criterion = nn.NLLLoss()   # log + nll.  # Add class weight
-# criterion = nn.CrossEntropyLoss()
+#criterion = nn.CrossEntropyLoss()
 criterion = nn.CrossEntropyLoss(
     weight=torch.Tensor([0.0807, 0.9193]).to(device))
 
@@ -82,6 +85,30 @@ def test(loader):
     return auc, acc, pred
 
 
+def save_result():
+
+    model.eval()
+
+    pred = []
+
+    with torch.no_grad():
+        for data in test_loader:
+            featrues = {k : v.to(device).float() 
+                    for k, v in data.items() if k != 'label'}
+            out = model(featrues)
+            out_prob = F.softmax(out, dim=1)
+            pred.append(out_prob)
+
+    pred = torch.cat(pred, dim=0)
+    pred = pred[:,1].cpu().numpy()
+
+    sample_file = os.path.join('../input', 'sample_submission.csv')
+    result = pd.read_csv(sample_file)
+    result['TARGET'] = pred
+
+    result.to_csv('./test_result.csv', index=False)
+
+
 def train():
 
     steps = 0
@@ -89,6 +116,9 @@ def train():
     for e in range(epoch):
 
         if e % 1 == 0:
+
+            #save_result()
+
             val_auc, val_acc, _ = test(val_loader)
             train_auc, train_acc, _ = test(train_loader)
 
@@ -126,4 +156,6 @@ def train():
 
 
 
+
+print(model)
 train()

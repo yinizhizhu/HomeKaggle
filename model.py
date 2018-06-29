@@ -9,6 +9,10 @@ class CreditNet(nn.Module):
         super(CreditNet, self).__init__()
 
         self.feature_grouping = feature_grouping
+        self.critical_feats = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']
+
+        for feature in self.critical_feats:
+            self.feature_grouping.pop(feature)
 
         ########### Embed layers 
         self.embed_layers = dict()
@@ -17,7 +21,7 @@ class CreditNet(nn.Module):
         for key, value in feature_grouping.items():
             modules = []
             for index, item in enumerate(value):
-                embed_size = min(len(item), 4)
+                embed_size = min(len(item), 3)
 
                 embedding = nn.Linear(len(item), embed_size, bias=False)
 
@@ -65,15 +69,19 @@ class CreditNet(nn.Module):
 
         self.base_out_size_sum = sum([v for v in self.base_out_sizes.values()])
 
+        ########### Middle layers
+        self.middle_layers = nn.Sequential(
+                nn.Linear(self.base_out_size_sum, 128),
+                nn.PReLU(),
+                nn.Linear(128, 96),
+                nn.PReLU()
+            )
+
         ########### Upper layers
         self.upper_layers = nn.Sequential(
-                nn.Linear(self.base_out_size_sum, 512),
+                nn.Linear(96 + len(self.critical_feats), 32),
                 nn.PReLU(),
-                nn.Linear(512, 512),
-                nn.PReLU(),
-                nn.Linear(512, 64),
-                nn.PReLU(),
-                nn.Linear(64, 2)
+                nn.Linear(32, 2),
             )
 
         #self.head = nn.LogSoftmax(dim=1)
@@ -83,7 +91,8 @@ class CreditNet(nn.Module):
 
 
         ########################
-        embed_features = {k : [] for k in features.keys()}
+        embed_features = {k : [] for k in features.keys()
+                            if k not in self.critical_feats}
 
         for key, value in self.feature_grouping.items():
             for index, item in enumerate(value):
@@ -98,13 +107,26 @@ class CreditNet(nn.Module):
         ########################
         base_layer_outs = []
         for key, value in embed_features.items():
-            base_layer_outs.append(self.base_layers[key](value))
+                base_layer_outs.append(self.base_layers[key](value))
 
         base_layer_outs = torch.cat(base_layer_outs, dim=1)
 
         ########################
 
-        upper_layer_out = self.upper_layers(base_layer_outs)
+        middle_layer_out = self.middle_layers(base_layer_outs)
+
+        ########################
+
+        upper_layer_in = [middle_layer_out]
+
+        for key in self.critical_feats:
+            upper_layer_in.append(features[key])
+
+        upper_layer_in = torch.cat(upper_layer_in, dim=1)
+
+        upper_layer_out = self.upper_layers(upper_layer_in)
+
+        ########################
 
         #final_out = self.head(upper_layer_out)
 

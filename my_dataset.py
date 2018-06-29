@@ -298,7 +298,7 @@ class LoanDataset(object):
         listed_values.append(self.train_labels)
 
         split_out = train_test_split(*listed_values, 
-                                     test_size=0.15, 
+                                     test_size=0.1, 
                                      random_state=42)
 
         self.app_train = dict()
