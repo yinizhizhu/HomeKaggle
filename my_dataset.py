@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import Imputer, MinMaxScaler
+from sklearn.model_selection import train_test_split
 import random
 from torch.utils.data import Dataset
 
@@ -195,8 +196,6 @@ def _get_all_raw_feature():
     return all_feature
 
 
-
-
 class LoanDataset(object):
 
     def __init__(self):
@@ -209,9 +208,6 @@ class LoanDataset(object):
 
         self.app_train = pd.read_csv(self.app_train_file)
         self.app_test = pd.read_csv(self.app_test_file)
-
-        self.train_num = self.app_train.shape[0]
-        self.test_num = self.app_test.shape[0]
 
         self.train_labels = np.array(self.app_train['TARGET'])
         print('Raw training label shape: ', self.train_labels.shape)
@@ -293,6 +289,31 @@ class LoanDataset(object):
             self.app_train[group] = scaler.transform(self.app_train[group])
             self.app_test[group] = scaler.transform(self.app_test[group])
 
+        ############## Train Val Split ######################
+
+        listed_app_train = list(self.app_train.items())
+        listed_keys = [i[0] for i in listed_app_train]
+        listed_values = [i[1] for i in listed_app_train]
+
+        listed_values.append(self.train_labels)
+
+        split_out = train_test_split(*listed_values, 
+                                     test_size=0.15, 
+                                     random_state=42)
+
+        self.app_train = dict()
+        self.app_val = dict()
+
+        for idx, key in enumerate(listed_keys):
+            self.app_train[key] = split_out[2 * idx]
+            self.app_val[key] = split_out[2 * idx + 1]
+
+        self.train_labels = split_out[-2]
+        self.val_labels = split_out[-1]
+
+
+
+
 
     def _print_column_num(self):
         print(sum([len(i.columns) for i in self.app_train.values()]))
@@ -338,27 +359,29 @@ class LoanDataset(object):
     #         print()
     #         i += 1
 
+loan_dataset = LoanDataset()
 
 
 class LoanDatasetWrapper(Dataset):
 
     def __init__(self, mode):
 
-        self.dataset = LoanDataset()
-
-        if mode not in ['train', 'test']:
+        if mode not in ['train', 'test', 'val']:
             raise Exception('Invalid mode')
         else:
             self.mode = mode
 
         if self.mode == 'train':
-            self.data = self.dataset.app_train
-            self.label = self.dataset.train_labels
+            self.data = loan_dataset.app_train
+            self.label = loan_dataset.train_labels
+        elif self.mode == 'val':
+            self.data = loan_dataset.app_val
+            self.label = loan_dataset.val_labels
         elif self.mode == 'test':
-            self.data = self.dataset.app_test
+            self.data = loan_dataset.app_test
 
     def get_feature_grouping(self):
-        return self.dataset.app_group_feat_map
+        return loan_dataset.app_group_feat_map
 
     def __len__(self):
         lens = [i.shape[0] for i in self.data.values()]
@@ -368,7 +391,7 @@ class LoanDatasetWrapper(Dataset):
 
         entry = {k : v[idx] for k, v in self.data.items()}
 
-        if self.mode == 'train':
+        if self.mode in ['train', 'val']:
             entry['label'] = self.label[idx]
 
         return entry

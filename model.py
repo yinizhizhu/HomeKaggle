@@ -17,9 +17,9 @@ class CreditNet(nn.Module):
         for key, value in feature_grouping.items():
             modules = []
             for index, item in enumerate(value):
-                embed_size = min(len(item), 3)
+                embed_size = min(len(item), 4)
 
-                embedding = nn.Linear(len(item), embed_size)
+                embedding = nn.Linear(len(item), embed_size, bias=False)
 
                 self.add_module(name='embed_layer_{}_{}'.format(key, index), 
                                 module=embedding)
@@ -40,22 +40,22 @@ class CreditNet(nn.Module):
 
             module_list = []
 
-            if embed_size <= 5:    # 3 -> 3
+            if embed_size <= 4:    # 3 -> 3
                 module_list.append(nn.Linear(embed_size, embed_size))
-                module_list.append(nn.ReLU())
+                module_list.append(nn.PReLU())
 
                 self.base_out_sizes[key] = embed_size
 
             else:
-                while embed_size > 15:   #10 -> 5    20 -> 6 -> 5    54 -> 18 -> 6 -> 5
-                    module_list.append(nn.Linear(embed_size, embed_size // 3))
-                    module_list.append(nn.ReLU())
-                    embed_size = embed_size // 3
+                while embed_size > 16:   #10 -> 5    20 -> 6 -> 5    54 -> 18 -> 6 -> 5
+                    module_list.append(nn.Linear(embed_size, embed_size // 2))
+                    module_list.append(nn.PReLU())
+                    embed_size = embed_size // 2
 
-                module_list.append(nn.Linear(embed_size, 5))
-                module_list.append(nn.ReLU())
+                module_list.append(nn.Linear(embed_size, 8))
+                module_list.append(nn.PReLU())
 
-                self.base_out_sizes[key] = 5
+                self.base_out_sizes[key] = 8
 
             module = nn.Sequential(*module_list)
 
@@ -68,15 +68,16 @@ class CreditNet(nn.Module):
         ########### Upper layers
         self.upper_layers = nn.Sequential(
                 nn.Linear(self.base_out_size_sum, 512),
-                nn.ReLU(),
-                nn.Linear(512, 128),
-                nn.ReLU(),
-                nn.Linear(128, 64),
-                nn.ReLU(),
+                nn.PReLU(),
+                nn.Linear(512, 512),
+                nn.PReLU(),
+                nn.Linear(512, 64),
+                nn.PReLU(),
                 nn.Linear(64, 2)
             )
 
         #self.head = nn.LogSoftmax(dim=1)
+
 
     def forward(self, features):
 
