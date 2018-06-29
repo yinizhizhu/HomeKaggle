@@ -15,10 +15,10 @@ import pdb
 
 #######################
 
-epoch = 150
+epoch = 3
 batch_size = 256
 
-learning_rate = 1e-4  # 1e-5
+learning_rate = 1e-3  # 1e-5
 lamda = 1e-6
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,7 +64,7 @@ def test(loader):
         for data in loader:
 
             featrues = {k : v.to(device).float() 
-                    for k, v in data.items() if k != 'label'}
+                    for k, v in data.items() if k not in ['id', 'label']}
             label = data['label'].to(device)
 
             out = model(featrues)
@@ -94,7 +94,7 @@ def save_result():
     with torch.no_grad():
         for data in test_loader:
             featrues = {k : v.to(device).float() 
-                    for k, v in data.items() if k != 'label'}
+                    for k, v in data.items() if k not in ['id', 'label']}
             out = model(featrues)
             out_prob = F.softmax(out, dim=1)
             pred.append(out_prob)
@@ -117,7 +117,7 @@ def train():
 
         if e % 1 == 0:
 
-            #save_result()
+            save_result()
 
             val_auc, val_acc, _ = test(val_loader)
             train_auc, train_acc, _ = test(train_loader)
@@ -137,7 +137,7 @@ def train():
         for batch_idx, data in enumerate(train_loader):
 
             featrues = {k : v.to(device).float() 
-                for k, v in data.items() if k != 'label'}
+                for k, v in data.items() if k not in ['id', 'label']}
             label = data['label'].to(device)
 
             optimizer.zero_grad()
