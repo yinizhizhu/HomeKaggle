@@ -4,12 +4,15 @@ import torch.nn.functional as F
 import torchvision.models as models
 import pdb
 
+
+# 
 class CreditNet(nn.Module):
-    def __init__(self, feature_grouping):
+    def __init__(self, feature_grouping, critical_feats, model_params):
         super(CreditNet, self).__init__()
 
         self.feature_grouping = feature_grouping
-        self.critical_feats = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']
+        self.critical_feats = critical_feats
+        self.model_params = model_params
 
         for feature in self.critical_feats:
             self.feature_grouping.pop(feature)
@@ -21,7 +24,7 @@ class CreditNet(nn.Module):
         for key, value in feature_grouping.items():
             modules = []
             for index, item in enumerate(value):
-                embed_size = min(len(item), 3)
+                embed_size = min(len(item), model_params[0])
 
                 embedding = nn.Linear(len(item), embed_size, bias=False)
 
@@ -44,22 +47,24 @@ class CreditNet(nn.Module):
 
             module_list = []
 
-            if embed_size <= 4:    # 3 -> 3
+            if embed_size <= (model_params[1] // 2):    # 3 -> 3
                 module_list.append(nn.Linear(embed_size, embed_size))
                 module_list.append(nn.PReLU())
 
                 self.base_out_sizes[key] = embed_size
 
             else:
-                while embed_size > 16:   #10 -> 5    20 -> 6 -> 5    54 -> 18 -> 6 -> 5
-                    module_list.append(nn.Linear(embed_size, embed_size // 2))
-                    module_list.append(nn.PReLU())
-                    embed_size = embed_size // 2
+                while embed_size > model_params[1] * model_params[2]:   #10 -> 8    20 -> 10 -> 8    54 -> 27 -> 13 -> 8
+                    module_list.append(nn.Linear(embed_size, 
+                        embed_size // model_params[2]))
 
-                module_list.append(nn.Linear(embed_size, 8))
+                    module_list.append(nn.PReLU())
+                    embed_size = embed_size // model_params[2]
+
+                module_list.append(nn.Linear(embed_size, model_params[1]))
                 module_list.append(nn.PReLU())
 
-                self.base_out_sizes[key] = 8
+                self.base_out_sizes[key] = model_params[1]
 
             module = nn.Sequential(*module_list)
 
@@ -71,17 +76,18 @@ class CreditNet(nn.Module):
 
         ########### Middle layers
         self.middle_layers = nn.Sequential(
-                nn.Linear(self.base_out_size_sum, 128),
+                nn.Linear(self.base_out_size_sum, model_params[3]),
                 nn.PReLU(),
-                nn.Linear(128, 96),
+                nn.Linear(model_params[3], model_params[4]),
                 nn.PReLU()
             )
 
         ########### Upper layers
         self.upper_layers = nn.Sequential(
-                nn.Linear(96 + len(self.critical_feats), 32),
+                nn.Linear(model_params[4] + len(self.critical_feats), 
+                    model_params[5]),
                 nn.PReLU(),
-                nn.Linear(32, 2),
+                nn.Linear(model_params[5], 2),
             )
 
         #self.head = nn.LogSoftmax(dim=1)

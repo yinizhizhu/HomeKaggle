@@ -10,11 +10,9 @@ from torch.utils.data import Dataset
 
 import pdb
 
-data_dir='../input'
-
 _app_grouping_map = {
 
-    'id': [
+    'SK_ID_CURR': [
         'SK_ID_CURR'
     ],
 
@@ -216,7 +214,7 @@ class LoanDataset(object):
         self.table_names = [
             'application_train',
             'application_test',
-            'bureau',
+            # 'bureau',
             # 'POS_CASH_balance',
             # 'credit_card_balance',
             # 'previous_application',
@@ -358,6 +356,9 @@ class LoanDataset(object):
         ############### Scale features ####################
         for group in self.all_grouping_maps['application_train'].keys():
 
+            if group in ['SK_ID_CURR', 'SK_ID_PREV', 'SK_ID_BUREAU']:
+                continue
+
             scaler = MinMaxScaler(feature_range=(0, 1))
             scaler.fit(self.all_tables['application_train'][group])
 
@@ -366,13 +367,15 @@ class LoanDataset(object):
             self.all_tables['application_test'][group] = scaler.transform(
                 self.all_tables['application_test'][group])
 
-
         for name in self.table_names:
 
             if name in ['application_train', 'application_test']:
                 continue
 
             for group in self.all_grouping_maps[name].keys():
+
+                if group in ['SK_ID_CURR', 'SK_ID_PREV', 'SK_ID_BUREAU']:
+                    continue
 
                 scaler = MinMaxScaler(feature_range=(0, 1))
                 self.all_tables[name][group] = scaler.fit_transform(
@@ -400,28 +403,55 @@ class LoanDataset(object):
         self.train_labels = split_out[-2]
         self.val_labels = split_out[-1]
 
-        def query(self, id):
-            pass # TO DO
+    def query(self, table_name, id_name, id_value):
+
+        result = dict()
+
+        indice = self.all_tables[table_name][id_name] == id_value
+        indice = indice[:, 0]
+
+        is_empty = indice.sum() <= 0
+
+        for group in self.all_grouping_maps[table_name].keys():
+
+            result[group] = self.all_tables[table_name][group][indice]
+
+        return result, is_empty
+
+    def get_feature_grouping(self, table_name):
+
+        grouping_map = dict(self.all_grouping_maps[table_name])
+        
+        if 'SK_ID_CURR' in grouping_map.keys():
+            grouping_map.pop('SK_ID_CURR')
+        
+        if 'SK_ID_PREV' in grouping_map.keys():
+            grouping_map.pop('SK_ID_PREV')
+        
+        if 'SK_ID_BUREAU' in grouping_map.keys():
+            grouping_map.pop('SK_ID_BUREAU')
+
+        return grouping_map
 
 
 
 
 
-    def _print_column_num(self):
-        print(sum([len(i.columns) for i in self.app_train.values()]))
-        print(sum([len(i.columns) for i in self.app_test.values()]))
+    # def _print_column_num(self):
+    #     print(sum([len(i.columns) for i in self.app_train.values()]))
+    #     print(sum([len(i.columns) for i in self.app_test.values()]))
 
-    def _print_df_shape(self):
+    # def _print_df_shape(self):
 
-        print('\nTraining data shape:\n')
-        for key, value in self.app_train.items():
-            print(key)
-            print(value.shape)
+    #     print('\nTraining data shape:\n')
+    #     for key, value in self.app_train.items():
+    #         print(key)
+    #         print(value.shape)
 
-        print('\nTesting data shape:\n')
-        for key, value in self.app_test.items():
-            print(key)
-            print(value.shape)
+    #     print('\nTesting data shape:\n')
+    #     for key, value in self.app_test.items():
+    #         print(key)
+    #         print(value.shape)
 
     def _remove_anomaly(self, table_name, anom_feat, anom_value):
 
@@ -465,12 +495,6 @@ class LoanDatasetWrapper(Dataset):
         elif self.mode == 'test':
             self.data = loan_dataset.all_tables['application_test']
 
-    def get_feature_grouping(self):
-
-        grouping_map = dict(loan_dataset.all_grouping_maps['application_train'])
-        grouping_map.pop('id')
-
-        return grouping_map
 
     def __len__(self):
         lens = [i.shape[0] for i in self.data.values()]
