@@ -201,8 +201,6 @@ def _get_all_raw_feature(grouping_map):
 
 # Maybe remove low variance features
 # bureau bal un used
-# self.bureau_bal_file = os.path.join(data_dir, 'bureau_balance.csv')
-# self.bureau_bal = pd.read_csv(self.bureau_bal_file)  # (27299925, 3)
 
 class LoanDataset(object):
 
@@ -433,10 +431,6 @@ class LoanDataset(object):
 
         return grouping_map
 
-
-
-
-
     # def _print_column_num(self):
     #     print(sum([len(i.columns) for i in self.app_train.values()]))
     #     print(sum([len(i.columns) for i in self.app_test.values()]))
@@ -508,23 +502,3 @@ class LoanDatasetWrapper(Dataset):
             entry['label'] = self.label[idx]
 
         return entry
-
-
-        
-
-
-# test_dataset = LoanDatasetWrapper(mode='train')
-# entry = test_dataset[0]
-
-# pdb.set_trace()
-
-
-
-
-
-
-
-
-        # Drop useless columns
-        # self.app_train = self.app_train.drop(columns = ['SK_ID_CURR'])
-        # self.app_test = self.app_test.drop(columns = ['SK_ID_CURR'])

@@ -15,11 +15,11 @@ import pdb
 
 #######################
 
-epoch = 1500
-batch_size = 512
+epoch = 1500    # Try bilinesr
+batch_size = 256
 
-learning_rate = 1e-4  # 1e-5
-lamda = 1e-5
+learning_rate = 1e-3  # 1e-5
+lamda = 0
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -45,12 +45,12 @@ models = {
     'app':  CreditNet(
     feature_grouping=loan_dataset.get_feature_grouping('application_train'),
     critical_feats = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3'],
-    model_params = [3, 8, 2, 256, 128, 32]).to(device),
+    model_params = [3, 8, 2, 2, 64]).to(device),
 
     # 'bureau': CreditNet(
     # feature_grouping=loan_dataset.get_feature_grouping('bureau'),
     # critical_feats = [],
-    # model_params = [3, 4, 2, 64, 32, 16]).to(device),
+    # model_params = [3, 4, 2, 2, 32]).to(device),
 }
 
 
@@ -162,11 +162,11 @@ def train():
 
     steps = 0
 
+    best_auc = 0.72
+
     for e in range(epoch):
 
         if e % 1 == 0:
-
-            save_result()
 
             val_auc, val_acc, _ = test(val_loader)
             train_auc, train_acc, _ = test(train_loader)
@@ -180,6 +180,10 @@ def train():
             logger.scalar_summary('val_acc', val_acc, e+1)
             logger.scalar_summary('train_auc', train_auc, e+1)
             logger.scalar_summary('train_acc', train_acc, e+1)
+
+            if val_auc > best_auc:
+                best_auc = val_auc
+                save_result()
 
         for model in models.values():
             model.train()
