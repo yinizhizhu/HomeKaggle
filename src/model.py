@@ -2,10 +2,15 @@ import torch.nn as nn
 
 
 class home_t(nn.Module):
-    def __init__(self):
+    def __init__(self, addBur, addRest):
         super(home_t, self).__init__()
+        inSize = 244
+        if addBur:
+            inSize += 43
+        if addRest:
+            inSize += 208
         self.lay1 = nn.Sequential(
-            nn.Linear(244, 512),
+            nn.Linear(inSize, 512),
             nn.BatchNorm1d(512),
             nn.LeakyReLU(),
         )

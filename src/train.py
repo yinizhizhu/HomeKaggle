@@ -26,7 +26,7 @@ np.random.seed(123)
 
 
 class trainer_Order:
-    def __init__(self, epochs, l, batchSize):
+    def __init__(self, epochs, l, batchSize, addBur, addRest):
         self.lr = l
         self.nEpochs = epochs
         self.batchSize = batchSize
@@ -43,7 +43,7 @@ class trainer_Order:
             torch.cuda.manual_seed(123)
 
         print('===> Loading datasets')
-        self.tst = readCSV().getTVT()
+        self.tst = readCSV(addBur, addRest).getTVT()
         self.training_data_loader = data.DataLoader(
             dataset=self.tst[0],
             # num_workers=4,
@@ -51,7 +51,7 @@ class trainer_Order:
             shuffle=True)
         self.modelN = 'split.pth'
 
-        self.model = home_t()
+        self.model = home_t(addBur, addRest)
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([0.0807, 0.9193]))
 
         out = open(self.outName, 'a')
@@ -168,6 +168,7 @@ class trainer_Order:
 
         out = open(self.outName, 'a')
         print >> out, "===> Epoch {} Complete: {}. Loss: {:.4f}".format(epoch, names[0], epoch_loss)
+        print >> out, "===> BestVal {:.4f}".format(self.bestVal)
         print "===> Epoch {} Complete: {}. Loss: {:.4f}".format(epoch, names[0], epoch_loss)
         out.close()
 
@@ -205,18 +206,16 @@ class trainer_Order:
 def main():
     print '--------------- Starting Point ----------------'
     # lrs = [1e-4, 1e-3, 1e-2]
-    # lrs = [1e-1, 1]
-    lrs = [1e-4]
-    # batchSizes = [6, 5, 4, 3, 2]
-    batchSizes = [256]
-    # batchSizes = [3]
+    lrs = [1e-3]
+    batchSizes = [256, 128]
+    # batchSizes = [64, 32, 16]
     for batchSize in batchSizes:
         for lr in lrs:
             print '     ', batchSize, lr
             for name in names:
                 cc.remove_experiment(name)
                 exper.append(cc.create_experiment(name))
-            t = trainer_Order(1000, lr, batchSize)
+            t = trainer_Order(50, lr, batchSize, addBur=1, addRest=1)
             t.training()
             # raw_input('Taking a Photo!')
             # for name in names:
